@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>Tutor Chat Tracker</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: white;
+      padding: 16px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    .datebox {
+      text-align: right;
+      font-size: 13px;
+      opacity: 0.85;
+    }
+
+    #countdown {
+      margin-top: 6px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    input[type="text"] {
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      font-size: 16px;
+    }
+
+    button {
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    button.danger {
+      background: #dc2626;
+    }
+
+    .progress {
+      margin-bottom: 10px;
+      font-size: 14px;
+      opacity: 0.85;
+    }
+
+    .card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .row-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .name {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 60px;
+      border-radius: 8px;
+      border: none;
+      padding: 10px;
+      font-size: 15px;
+      resize: vertical;
+    }
+
+    .remove-btn {
+      margin-top: 8px;
+      background: #334155;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Tutor Tracker</h1>
+  <div class="datebox">
+    <div id="today"></div>
+    <div id="time"></div>
+    <div id="countdown"></div>
+  </div>
+</div>
+
+<div class="controls">
+  <input id="nameInput" type="text" placeholder="Add name...">
+  <button onclick="addName()">Add Person</button>
+  <button class="danger" onclick="clearCycle()">Reset This Cycle</button>
+</div>
+
+<div class="progress" id="progress"></div>
+
+<div id="listContainer"></div>
+
+<script>
+const FIRST_DUE = new Date(2026, 1, 18, 10, 0, 0);
+const INTERVAL = 14 * 24 * 60 * 60 * 1000;
+const NAMES_KEY = "tracker_names";
+
+function currentCycleIndex() {
+  const now = new Date();
+  if (now <= FIRST_DUE) return 0;
+  return Math.floor((now - FIRST_DUE) / INTERVAL) + 1;
+}
+
+function cycleKey() {
+  return "cycle_" + currentCycleIndex();
+}
+
+function nextResetTime() {
+  return new Date(FIRST_DUE.getTime() + currentCycleIndex() * INTERVAL);
+}
+
+function formatCountdown(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m ${s}s`;
+  return `${h}h ${m}m ${s}s`;
+}
+
+function loadNames() {
+  return JSON.parse(localStorage.getItem(NAMES_KEY) || "[]");
+}
+
+function saveNames(names) {
+  localStorage.setItem(NAMES_KEY, JSON.stringify(names));
+}
+
+function loadState() {
+  return JSON.parse(localStorage.getItem(cycleKey()) || "{}");
+}
+
+function saveState(state) {
+  localStorage.setItem(cycleKey(), JSON.stringify(state));
+}
+
+function addName() {
+  const input = document.getElementById("nameInput");
+  const name = input.value.trim();
+  if (!name) return;
+  const names = loadNames();
+  if (!names.includes(name)) {
+    names.push(name);
+    saveNames(names);
+  }
+  input.value = "";
+  render();
+}
+
+function removeName(name) {
+  const names = loadNames().filter(n => n !== name);
+  saveNames(names);
+  render();
+}
+
+function clearCycle() {
+  localStorage.removeItem(cycleKey());
+  render();
+}
+
+function toggleCheck(name) {
+  const state = loadState();
+  state[name].checked = !state[name].checked;
+  saveState(state);
+  render();
+}
+
+function updateNote(name, value) {
+  const state = loadState();
+  state[name].note = value;
+  saveState(state);
+}
+
+function render() {
+  const names = loadNames();
+  const state = loadState();
+  const container = document.getElementById("listContainer");
+  const progress = document.getElementById("progress");
+
+  if (!names.length) {
+    container.innerHTML = "<p>No names yet.</p>";
+    progress.textContent = "";
+    return;
+  }
+
+  let done = 0;
+  container.innerHTML = "";
+
+  names.forEach(name => {
+    if (!state[name]) state[name] = { checked: false, note: "" };
+    if (state[name].checked) done++;
+
+    const card = document.createElement("div");
+    card.className = "card";
+
+    card.innerHTML = `
+      <div class="row-top">
+        <div class="name">${name}</div>
+        <input type="checkbox" ${state[name].checked ? "checked" : ""}
+          onchange="toggleCheck('${name.replace(/'/g, "\\'")}')">
+      </div>
+      <textarea placeholder="Notes..." 
+        onchange="updateNote('${name.replace(/'/g, "\\'")}', this.value)">${state[name].note}</textarea>
+      <button class="remove-btn" onclick="removeName('${name.replace(/'/g, "\\'")}')">Remove</button>
+    `;
+
+    container.appendChild(card);
+  });
+
+  saveState(state);
+  progress.textContent = `Progress: ${done}/${names.length}`;
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById("today").textContent = now.toDateString();
+  document.getElementById("time").textContent = now.toLocaleTimeString();
+
+  const diff = nextResetTime() - now;
+  document.getElementById("countdown").textContent = "Resets in: " + formatCountdown(diff);
+}
+
+setInterval(updateClock, 1000);
+render();
+updateClock();
+</script>
+
+</body>
+</html>
